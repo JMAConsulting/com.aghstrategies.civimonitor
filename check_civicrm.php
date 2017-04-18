@@ -19,11 +19,17 @@
  * _site_key  {your site key from settings.php}
  * _api_key   {an api key set on the civicrm_contact row corresponding to an admin user}
  */
+set_error_handler(
+  create_function(
+    '$severity, $message, $file, $line',
+    'throw new ErrorException($message, $severity, $severity, $file, $line);'
+  )
+);
 
 $prot = ($argv[2] == 'https') ? 'https' : 'http';
 // Specify a user header for file_get_contents.
-$userAgent = array('http' => array('user_agent' => 'CiviMonitor'));
-$streamContext = stream_context_create($userAgent);
+$params = array('http' => array('user_agent' => 'CiviMonitor', 'timeout' => 6));
+$streamContext = stream_context_create($params);
 
 switch (strtolower($argv[3])) {
   case 'joomla':
@@ -43,7 +49,16 @@ switch (strtolower($argv[6])) {
   case 'version':
     $result = file_get_contents("$prot://{$argv[1]}/$path/extern/rest.php?entity=domain&action=get&key={$argv[4]}&api_key={$argv[5]}&return=version&json=1",false,$streamContext);
 
-    $latest = file_get_contents('http://latest.civicrm.org/stable.php?format=json');
+    try{
+      $latest = file_get_contents('http://latest.civicrm.org/stable.php?format=json', false, $streamContext);
+    }
+    catch (Exception $e) {
+      if (strpos($e->getMessage(), 'Connection timed out') !== FALSE) {
+        echo "latest.civicrm.org is down.  Can't check version.\n";
+        exit(3);
+      }
+    }
+    restore_error_handler();
 
     $a = json_decode($result, TRUE);
     if ($a["is_error"] != 1 && is_array($a['values'])) {
